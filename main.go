@@ -2,32 +2,13 @@ package main
 
 import (
 	"net/http"
-	"time"
 
+	"github.com/conan-flynn/cronnect/models"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
-
-type Job struct {
-	ID         string         `gorm:"primaryKey" json:"id"`
-	Name       string         `gorm:"size:100;not null" json:"name"`
-	URL        string         `gorm:"not null" json:"url"`
-	Method     string         `gorm:"size:10;default:GET" json:"method"`
-	Schedule   string         `gorm:"size:100;not null" json:"schedule"`
-	Status     string         `gorm:"size:20;default:active" json:"status"`
-	Executions []JobExecution `gorm:"foreignKey:JobID;constraint:OnDelete:CASCADE" json:"executions,omitempty"`
-}
-
-type JobExecution struct {
-	ID           string     `gorm:"primaryKey" json:"id"`
-	JobID        string     `gorm:"index;not null" json:"job_id"`
-	StartedAt    time.Time  `gorm:"autoCreateTime" json:"started_at"`
-	FinishedAt   *time.Time `json:"finished_at,omitempty"`
-	Status       string     `gorm:"size:20;not null" json:"status"`
-	ResponseCode int        `json:"response_code"`
-}
 
 var db *gorm.DB
 
@@ -39,7 +20,7 @@ func main() {
 		panic("failed to connect to database")
 	}
 
-	db.AutoMigrate(&Job{}, &JobExecution{})
+	db.AutoMigrate(&models.Job{}, &models.JobExecution{})
 
 	router := gin.Default()
 	router.GET("/jobs", getJobs)
@@ -48,13 +29,13 @@ func main() {
 }
 
 func getJobs(c *gin.Context) {
-	var jobs []Job
+	var jobs []models.Job
 	db.Preload("Executions").Find(&jobs)
 	c.IndentedJSON(http.StatusOK, jobs)
 }
 
 func createJob(c *gin.Context) {
-	var newJob Job
+	var newJob models.Job
 	if err := c.BindJSON(&newJob); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid job data"})
 		return
