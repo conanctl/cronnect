@@ -27,6 +27,7 @@ func main() {
 	go scheduler.StartScheduler()
 
 	router := gin.Default()
+	router.StaticFile("/", "./index.html")
 	router.GET("/jobs", getJobs)
 	router.POST("/jobs", createJob)
 	router.Run("localhost:8080")
