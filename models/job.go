@@ -7,5 +7,5 @@ type Job struct {
 	Method     string         `gorm:"size:10;default:GET" json:"method"`
 	Schedule   string         `gorm:"size:100;not null" json:"schedule"`
 	Status     string         `gorm:"size:20;default:active" json:"status"`
-	Executions []JobExecution `gorm:"foreignKey:JobID;constraint:OnDelete:CASCADE" json:"executions,omitempty"`
+	Executions []JobExecution `gorm:"foreignKey:JobID;constraint:OnDelete:CASCADE" json:"executions"`
 }

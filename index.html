@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Cronnect Dashboard</title>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; }
+    input, button { margin: 0.5rem 0; padding: 0.3rem; }
+    table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+    th, td { border: 1px solid #ccc; padding: 0.5rem; }
+  </style>
+</head>
+<body>
+  <h1>Cronnect Job Scheduler</h1>
+
+  <h2>Create a Job</h2>
+  <form id="jobForm">
+    <input type="text" id="name" placeholder="Job Name" required />
+    <input type="text" id="url" placeholder="Job URL" required />
+    <input type="text" id="method" placeholder="HTTP Method (GET, POST)" value="GET" />
+    <input type="text" id="schedule" placeholder="Cron Schedule (e.g. */5 * * * *)" required />
+    <button type="submit">Create Job</button>
+  </form>
+
+  <h2>All Jobs</h2>
+  <table id="jobsTable">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Name</th>
+        <th>URL</th>
+        <th>Method</th>
+        <th>Schedule</th>
+        <th>Status</th>
+        <th>Executions</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script>
+    const API_URL = 'http://localhost:8080';
+
+    async function fetchJobs() {
+      const res = await fetch(`${API_URL}/jobs`);
+      const jobs = await res.json();
+      const tbody = document.querySelector('#jobsTable tbody');
+      tbody.innerHTML = '';
+      jobs.forEach(job => {
+      const execs = (job.executions || []).map(e => `Status: ${e.status}, Code: ${e.response_code}`).join('<br>') || 'No executions';
+        const row = `<tr>
+          <td>${job.id}</td>
+          <td>${job.name}</td>
+          <td>${job.url}</td>
+          <td>${job.method}</td>
+          <td>${job.schedule}</td>
+          <td>${job.status}</td>
+          <td>${execs}</td>
+        </tr>`;
+        tbody.innerHTML += row;
+      });
+    }
+
+    document.getElementById('jobForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const newJob = {
+        name: document.getElementById('name').value,
+        url: document.getElementById('url').value,
+        method: document.getElementById('method').value,
+        schedule: document.getElementById('schedule').value
+      };
+      await fetch(`${API_URL}/jobs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newJob)
+      });
+      e.target.reset();
+      fetchJobs();
+    });
+
+    fetchJobs();
+    setInterval(fetchJobs, 5000);
+  </script>
+</body>
+</html>
