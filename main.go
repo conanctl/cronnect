@@ -6,27 +6,27 @@ import (
 	"github.com/conan-flynn/cronnect/database"
 	"github.com/conan-flynn/cronnect/models"
 	"github.com/conan-flynn/cronnect/scheduler"
-	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
+var db *gorm.DB
+
 func main() {
 	dsn := "host=localhost user=youruser password=yourpass dbname=yourdb port=5432 sslmode=disable TimeZone=UTC"
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	var err error
+	db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		panic("failed to connect to database")
 	}
 	database.DB = db
 	db.AutoMigrate(&models.Job{}, &models.JobExecution{})
 
-	scheduler.StartScheduler()
+	go scheduler.StartScheduler()
 
 	router := gin.Default()
-	router.Use(cors.Default())
 	router.GET("/jobs", getJobs)
 	router.POST("/jobs", createJob)
 	router.Run("localhost:8080")
