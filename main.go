@@ -97,5 +97,8 @@ func createJob(c *gin.Context) {
 	}
 	newJob.ID = uuid.NewString()
 	database.DB.Create(&newJob)
+	
+	scheduler.ReloadJobs()
+	
 	c.IndentedJSON(http.StatusCreated, newJob)
 }

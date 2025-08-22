@@ -35,6 +35,16 @@ func NewQueueService() *QueueService {
 
 
 func (qs *QueueService) PublishJob(job *models.Job) error {
+	pendingKey := fmt.Sprintf("pending:%s", job.ID)
+	
+	exists, err := qs.client.Exists(qs.ctx, pendingKey).Result()
+	if err != nil {
+		log.Printf("Error checking pending job: %v", err)
+	} else if exists > 0 {
+		log.Printf("Job %s already has pending execution, skipping", job.Name)
+		return nil
+	}
+
 	executionID := uuid.NewString()
 	
 
@@ -63,8 +73,11 @@ func (qs *QueueService) PublishJob(job *models.Job) error {
 		return fmt.Errorf("failed to marshal job payload: %w", err)
 	}
 
+	qs.client.Set(qs.ctx, pendingKey, executionID, 10*time.Minute)
+
 	err = qs.client.LPush(qs.ctx, JobQueue, payloadJSON).Err()
 	if err != nil {
+		qs.client.Del(qs.ctx, pendingKey)
 		execution.Status = "failed"
 		database.DB.Save(&execution)
 		return fmt.Errorf("failed to publish job to queue: %w", err)
@@ -125,18 +138,24 @@ func (qs *QueueService) handleJobResult(payload *models.JobPayload, result *mode
 	execution.ResponseCode = result.ResponseCode
 	execution.FinishedAt = &result.CompletedAt
 
+	pendingKey := fmt.Sprintf("pending:%s", payload.JobID)
+
 	if result.Status == "failed" && payload.RetryCount < payload.MaxRetries {
 		payload.RetryCount++
 		if err := qs.requeueForRetry(payload); err != nil {
 			log.Printf("Failed to requeue job for retry: %v", err)
 			qs.moveToDeadQueue(payload, result.ErrorMessage)
+			qs.client.Del(qs.ctx, pendingKey)
 		} else {
 			execution.Status = "retry"
 			log.Printf("Job %s queued for retry (attempt %d/%d)", payload.Name, payload.RetryCount, payload.MaxRetries)
 		}
-	} else if result.Status == "failed" {
-		qs.moveToDeadQueue(payload, result.ErrorMessage)
-		log.Printf("Job %s moved to dead letter queue after %d failed attempts", payload.Name, payload.RetryCount)
+	} else {
+		qs.client.Del(qs.ctx, pendingKey)
+		if result.Status == "failed" {
+			qs.moveToDeadQueue(payload, result.ErrorMessage)
+			log.Printf("Job %s moved to dead letter queue after %d failed attempts", payload.Name, payload.RetryCount)
+		}
 	}
 
 	return database.DB.Save(&execution).Error

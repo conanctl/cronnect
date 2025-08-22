@@ -18,13 +18,10 @@ func StartScheduler() {
 	c = cron.New()
 	loadJobsFromDB()
 	c.Start()
+}
 
-	go func() {
-		for {
-			time.Sleep(10 * time.Second)
-			loadJobsFromDB()
-		}
-	}()
+func ReloadJobs() {
+	loadJobsFromDB()
 }
 
 func loadJobsFromDB() {
