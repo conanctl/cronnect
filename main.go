@@ -54,6 +54,7 @@ func main() {
 	router.StaticFile("/", "./index.html")
 	router.GET("/jobs", getJobs)
 	router.POST("/jobs", createJob)
+	router.DELETE("/jobs/:id", deleteJob)
 	router.Run("localhost:8080")
 }
 
@@ -101,4 +102,23 @@ func createJob(c *gin.Context) {
 	scheduler.ReloadJobs()
 	
 	c.IndentedJSON(http.StatusCreated, newJob)
+}
+
+func deleteJob(c *gin.Context) {
+	jobID := c.Param("id")
+	
+	var job models.Job
+	if err := database.DB.First(&job, "id = ?", jobID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "job not found"})
+		return
+	}
+	
+	if err := database.DB.Delete(&job).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete job"})
+		return
+	}
+	
+	scheduler.ReloadJobs()
+	
+	c.JSON(http.StatusOK, gin.H{"message": "job deleted successfully"})
 }

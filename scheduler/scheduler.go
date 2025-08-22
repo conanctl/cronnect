@@ -2,7 +2,6 @@ package scheduler
 
 import (
 	"log"
-	"time"
 
 	"github.com/conan-flynn/cronnect/database"
 	"github.com/conan-flynn/cronnect/models"

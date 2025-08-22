@@ -60,6 +60,18 @@
             color: red;
             margin-top: 10px;
         }
+        .delete-btn {
+            background-color: #dc3545;
+            color: white;
+            padding: 4px 8px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .delete-btn:hover {
+            background-color: #c82333;
+        }
     </style>
 </head>
 <body>
@@ -104,6 +116,7 @@
                 <th>URL</th>
                 <th>Method</th>
                 <th>Executions</th>
+                <th>Actions</th>
             </tr>
         </thead>
         <tbody id="jobs-table-body"></tbody>
@@ -118,6 +131,22 @@
                         "Content-Type": "application/json",
                     },
                     body: JSON.stringify(jobData),
+                });
+
+                if (response.ok) {
+                    return await response.json();
+                } else {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+            } catch (error) {
+                throw error;
+            }
+        }
+
+        async function deleteJob(jobId) {
+            try {
+                const response = await fetch(`http://localhost:8080/jobs/${jobId}`, {
+                    method: "DELETE",
                 });
 
                 if (response.ok) {
@@ -171,11 +200,28 @@
                         <td>${job.url}</td>
                         <td>${job.method}</td>
                         <td>${executions}</td>
+                        <td>
+                            <button class="delete-btn" onclick="handleDeleteJob('${job.id}', '${job.name}')">
+                                Delete
+                            </button>
+                        </td>
                     `;
                     tbody.appendChild(row);
                 });
             } catch (err) {
                 console.error("Failed to load jobs:", err);
+            }
+        }
+
+        async function handleDeleteJob(jobId, jobName) {
+            if (confirm(`Are you sure you want to delete the job "${jobName}"? This will also delete all execution history.`)) {
+                try {
+                    await deleteJob(jobId);
+                    alert(`Job "${jobName}" deleted successfully!`);
+                    loadJobs();
+                } catch (error) {
+                    alert(`Error deleting job: ${error.message}`);
+                }
             }
         }
 
