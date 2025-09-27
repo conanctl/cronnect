@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
+	"github.com/robfig/cron/v3"
 	"github.com/conan-flynn/cronnect/database"
 	"github.com/conan-flynn/cronnect/models"
 	"github.com/conan-flynn/cronnect/queue"
@@ -32,7 +34,14 @@ func main() {
 		getEnv("DATABASE_TIMEZONE", "UTC"),
 	)
 	var err error
-	db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	for attempt := 1; attempt <= 30; attempt++ {
+		db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+		if err == nil {
+			break
+		}
+		log.Printf("Database not ready (attempt %d/30): %v", attempt, err)
+		time.Sleep(1 * time.Second)
+	}
 	if err != nil {
 		panic("failed to connect to database")
 	}
@@ -51,11 +60,12 @@ func main() {
 	worker.StartMultipleWorkers(workerCount)
 
 	router := gin.Default()
-	router.StaticFile("/", "./index.html")
+	router.StaticFile("/", "/app/frontend/index.html")
+
 	router.GET("/jobs", getJobs)
 	router.POST("/jobs", createJob)
 	router.DELETE("/jobs/:id", deleteJob)
-	router.Run("localhost:8080")
+	router.Run("0.0.0.0:8080")
 }
 
 func getWorkerCount() int {
@@ -94,6 +104,11 @@ func createJob(c *gin.Context) {
 	var newJob models.Job
 	if err := c.BindJSON(&newJob); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid job data"})
+		return
+	}
+
+	if _, err := cron.ParseStandard(newJob.Schedule); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid cron schedule"})
 		return
 	}
 	newJob.ID = uuid.NewString()
