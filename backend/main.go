@@ -3,23 +3,17 @@ package main
 import (
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"strconv"
 	"time"
 
-	"github.com/robfig/cron/v3"
 	"github.com/conan-flynn/cronnect/auth"
 	"github.com/conan-flynn/cronnect/database"
-	"github.com/conan-flynn/cronnect/middleware"
 	"github.com/conan-flynn/cronnect/models"
 	"github.com/conan-flynn/cronnect/queue"
+	"github.com/conan-flynn/cronnect/routes"
 	"github.com/conan-flynn/cronnect/scheduler"
 	"github.com/conan-flynn/cronnect/worker"
-	"github.com/gin-contrib/sessions"
-	"github.com/gin-contrib/sessions/cookie"
-	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -31,6 +25,11 @@ func main() {
 	godotenv.Load()
 	
 	auth.InitOAuth()
+	
+	sessionSecret := os.Getenv("SESSION_SECRET")
+	if sessionSecret == "" {
+		log.Fatal("SESSION_SECRET environment variable is required")
+	}
 	
 	dsn := fmt.Sprintf(
 		"host=%s user=%s password=%s dbname=%s port=%s sslmode=%s TimeZone=%s",
@@ -68,38 +67,7 @@ func main() {
 	log.Printf("Starting %d workers", workerCount)
 	worker.StartMultipleWorkers(workerCount)
 
-	router := gin.Default()
-	
-	sessionSecret := os.Getenv("SESSION_SECRET")
-	if sessionSecret == "" {
-		log.Fatal("SESSION_SECRET environment variable is required")
-	}
-	store := cookie.NewStore([]byte(sessionSecret))
-	store.Options(sessions.Options{
-		Path:     "/",
-		MaxAge:   86400 * 7,
-		HttpOnly: true,
-		Secure:   true,
-		SameSite: http.SameSiteLaxMode,
-	})
-	router.Use(sessions.Sessions("cronnect_session", store))
-	
-	router.StaticFile("/", "/app/frontend/index.html")
-	
-	router.GET("/auth/google", auth.GoogleLogin)
-	router.GET("/auth/google/callback", auth.GoogleCallback)
-	router.GET("/auth/github", auth.GithubLogin)
-	router.GET("/auth/github/callback", auth.GithubCallback)
-	router.GET("/auth/logout", auth.Logout)
-	router.GET("/auth/user", auth.GetCurrentUser)
-	
-	protected := router.Group("/")
-	protected.Use(middleware.AuthRequired())
-	{
-		protected.GET("/jobs", getJobs)
-		protected.POST("/jobs", createJob)
-		protected.DELETE("/jobs/:id", deleteJob)
-	}
+	router := routes.SetupRoutes(db)
 	
 	router.Run("0.0.0.0:8080")
 }
@@ -130,46 +98,3 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
-func getJobs(c *gin.Context) {
-	var jobs []models.Job
-	database.DB.Preload("Executions").Find(&jobs)
-	c.IndentedJSON(http.StatusOK, jobs)
-}
-
-func createJob(c *gin.Context) {
-	var newJob models.Job
-	if err := c.BindJSON(&newJob); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid job data"})
-		return
-	}
-
-	if _, err := cron.ParseStandard(newJob.Schedule); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid cron schedule"})
-		return
-	}
-	newJob.ID = uuid.NewString()
-	database.DB.Create(&newJob)
-	
-	scheduler.ReloadJobs()
-	
-	c.IndentedJSON(http.StatusCreated, newJob)
-}
-
-func deleteJob(c *gin.Context) {
-	jobID := c.Param("id")
-	
-	var job models.Job
-	if err := database.DB.First(&job, "id = ?", jobID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "job not found"})
-		return
-	}
-	
-	if err := database.DB.Delete(&job).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete job"})
-		return
-	}
-	
-	scheduler.ReloadJobs()
-	
-	c.JSON(http.StatusOK, gin.H{"message": "job deleted successfully"})
-}
