@@ -9,13 +9,18 @@ import (
 	"time"
 
 	"github.com/robfig/cron/v3"
+	"github.com/conan-flynn/cronnect/auth"
 	"github.com/conan-flynn/cronnect/database"
+	"github.com/conan-flynn/cronnect/middleware"
 	"github.com/conan-flynn/cronnect/models"
 	"github.com/conan-flynn/cronnect/queue"
 	"github.com/conan-flynn/cronnect/scheduler"
 	"github.com/conan-flynn/cronnect/worker"
+	"github.com/gin-contrib/sessions"
+	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/joho/godotenv"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -23,6 +28,10 @@ import (
 var db *gorm.DB
 
 func main() {
+	godotenv.Load()
+	
+	auth.InitOAuth()
+	
 	dsn := fmt.Sprintf(
 		"host=%s user=%s password=%s dbname=%s port=%s sslmode=%s TimeZone=%s",
 		getEnv("DATABASE_HOST", "localhost"),
@@ -46,7 +55,7 @@ func main() {
 		panic("failed to connect to database")
 	}
 	database.DB = db
-	db.AutoMigrate(&models.Job{}, &models.JobExecution{})
+	db.AutoMigrate(&models.Job{}, &models.JobExecution{}, &models.User{})
 
 	database.ConnectRedis()
 
@@ -60,11 +69,38 @@ func main() {
 	worker.StartMultipleWorkers(workerCount)
 
 	router := gin.Default()
+	
+	sessionSecret := os.Getenv("SESSION_SECRET")
+	if sessionSecret == "" {
+		log.Fatal("SESSION_SECRET environment variable is required")
+	}
+	store := cookie.NewStore([]byte(sessionSecret))
+	store.Options(sessions.Options{
+		Path:     "/",
+		MaxAge:   86400 * 7,
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+	})
+	router.Use(sessions.Sessions("cronnect_session", store))
+	
 	router.StaticFile("/", "/app/frontend/index.html")
-
-	router.GET("/jobs", getJobs)
-	router.POST("/jobs", createJob)
-	router.DELETE("/jobs/:id", deleteJob)
+	
+	router.GET("/auth/google", auth.GoogleLogin)
+	router.GET("/auth/google/callback", auth.GoogleCallback)
+	router.GET("/auth/github", auth.GithubLogin)
+	router.GET("/auth/github/callback", auth.GithubCallback)
+	router.GET("/auth/logout", auth.Logout)
+	router.GET("/auth/user", auth.GetCurrentUser)
+	
+	protected := router.Group("/")
+	protected.Use(middleware.AuthRequired())
+	{
+		protected.GET("/jobs", getJobs)
+		protected.POST("/jobs", createJob)
+		protected.DELETE("/jobs/:id", deleteJob)
+	}
+	
 	router.Run("0.0.0.0:8080")
 }
 

@@ -1,6 +1,8 @@
 services:
   app:
     build: .
+    env_file:
+      - .env
     environment:
       DATABASE_HOST: postgres
       DATABASE_USER: cronnect
