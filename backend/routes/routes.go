@@ -34,12 +34,13 @@ func SetupRoutes(db *gorm.DB) *gin.Engine {
 	router.GET("/auth/logout", auth.Logout)
 	router.GET("/auth/user", auth.GetCurrentUser)
 	
+	router.StaticFile("/", "/app/frontend/index.html")
+	
 	jobController := controllers.NewJobController(db)
 	
 	protected := router.Group("/")
 	protected.Use(middleware.AuthRequired())
 	{
-		protected.StaticFile("/", "/app/frontend/index.html")
 		protected.GET("/jobs", jobController.GetJobs)
 		protected.POST("/jobs", jobController.CreateJob)
 		protected.DELETE("/jobs/:id", jobController.DeleteJob)
