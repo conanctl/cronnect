@@ -20,12 +20,46 @@ func NewJobController(db *gorm.DB) *JobController {
 }
 
 func (jc *JobController) GetJobs(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
+
 	var jobs []models.Job
-	jc.DB.Preload("Executions").Find(&jobs)
+	jc.DB.Where("user_id = ?", userID).Preload("Executions").Find(&jobs)
 	c.IndentedJSON(http.StatusOK, jobs)
 }
 
+func (jc *JobController) GetJob(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
+
+	jobID := c.Param("id")
+	
+	var job models.Job
+	if err := jc.DB.Where("id = ? AND user_id = ?", jobID, userID).Preload("Executions").First(&job).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "job not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to retrieve job"})
+		}
+		return
+	}
+	
+	c.IndentedJSON(http.StatusOK, job)
+}
+
 func (jc *JobController) CreateJob(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
+
 	var newJob models.Job
 	if err := c.BindJSON(&newJob); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid job data"})
@@ -37,19 +71,79 @@ func (jc *JobController) CreateJob(c *gin.Context) {
 		return
 	}
 	newJob.ID = uuid.NewString()
-	jc.DB.Create(&newJob)
+	newJob.UserID = userID.(string)
+
+	if err := jc.DB.Create(&newJob).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create job"})
+		return
+	}
 	
 	scheduler.ReloadJobs()
 	
 	c.IndentedJSON(http.StatusCreated, newJob)
 }
 
+func (jc *JobController) UpdateJob(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
+
+	jobID := c.Param("id")
+	
+	var existingJob models.Job
+	if err := jc.DB.Where("id = ? AND user_id = ?", jobID, userID).First(&existingJob).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "job not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to retrieve job"})
+		}
+		return
+	}
+
+	var updateData models.Job
+	if err := c.BindJSON(&updateData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid job data"})
+		return
+	}
+
+	if updateData.Schedule != "" {
+		if _, err := cron.ParseStandard(updateData.Schedule); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid cron schedule"})
+			return
+		}
+	}
+
+	updateData.UserID = existingJob.UserID
+	updateData.ID = existingJob.ID
+
+	if err := jc.DB.Model(&existingJob).Updates(updateData).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update job"})
+		return
+	}
+	
+	scheduler.ReloadJobs()
+	
+	c.IndentedJSON(http.StatusOK, existingJob)
+}
+
 func (jc *JobController) DeleteJob(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
+
 	jobID := c.Param("id")
 	
 	var job models.Job
-	if err := jc.DB.First(&job, "id = ?", jobID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "job not found"})
+	if err := jc.DB.Where("id = ? AND user_id = ?", jobID, userID).First(&job).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "job not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to retrieve job"})
+		}
 		return
 	}
 	

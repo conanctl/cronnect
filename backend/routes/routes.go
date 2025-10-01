@@ -42,7 +42,10 @@ func SetupRoutes(db *gorm.DB) *gin.Engine {
 	protected.Use(middleware.AuthRequired())
 	{
 		protected.GET("/jobs", jobController.GetJobs)
+		protected.GET("/jobs/:id", jobController.GetJob)
 		protected.POST("/jobs", jobController.CreateJob)
+		protected.PUT("/jobs/:id", jobController.UpdateJob)
+		protected.PATCH("/jobs/:id", jobController.UpdateJob)
 		protected.DELETE("/jobs/:id", jobController.DeleteJob)
 	}
 

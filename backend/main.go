@@ -54,7 +54,7 @@ func main() {
 		panic("failed to connect to database")
 	}
 	database.DB = db
-	db.AutoMigrate(&models.Job{}, &models.JobExecution{}, &models.User{})
+	db.AutoMigrate(&models.User{}, &models.Job{}, &models.JobExecution{})
 
 	database.ConnectRedis()
 

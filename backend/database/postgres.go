@@ -29,7 +29,7 @@ func Connect() *gorm.DB {
 		log.Fatal("failed to connect to database")
 	}
 
-	db.AutoMigrate(&models.Job{}, &models.JobExecution{})
+	db.AutoMigrate(&models.User{}, &models.Job{}, &models.JobExecution{})
 	DB = db
 	return db
 }
