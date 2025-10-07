@@ -47,6 +47,7 @@ func SetupRoutes(db *gorm.DB) *gin.Engine {
 		protected.PUT("/jobs/:id", jobController.UpdateJob)
 		protected.PATCH("/jobs/:id", jobController.UpdateJob)
 		protected.DELETE("/jobs/:id", jobController.DeleteJob)
+		protected.GET("/rate-limit", jobController.GetRateLimit)
 	}
 
 	return router

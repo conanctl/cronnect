@@ -160,6 +160,26 @@
     #login-screen {
       display: none;
     }
+
+    .rate-limit-widget {
+      background: #f4f4f4;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 12px 16px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .rate-limit-text {
+      font-size: 14px;
+      color: #333;
+    }
+
+    .rate-limit-text strong {
+      font-weight: bold;
+    }
   </style>
 </head>
 
@@ -192,6 +212,12 @@
       <div class="user-info">
         <p>Logged in as: <strong id="user-name"></strong></p>
         <button class="logout-btn" onclick="logout()">Logout</button>
+      </div>
+    </div>
+
+    <div class="rate-limit-widget">
+      <div class="rate-limit-text">
+        Rate Limit: <strong id="rate-limit-remaining">-</strong> / <strong id="rate-limit-limit">-</strong> remaining
       </div>
     </div>
 
@@ -255,6 +281,7 @@
           document.getElementById("authenticated-content").style.display = "block";
           document.getElementById("login-screen").style.display = "none";
           loadJobs();
+          loadRateLimit();
         } else {
           isAuthenticated = false;
           document.getElementById("authenticated-content").style.display = "none";
@@ -269,6 +296,19 @@
 
     function logout() {
       window.location.href = "/auth/logout";
+    }
+
+    async function loadRateLimit() {
+      try {
+        const response = await fetch("/rate-limit");
+        const data = await response.json();
+        
+        document.getElementById("rate-limit-remaining").textContent = data.remaining;
+        document.getElementById("rate-limit-limit").textContent = data.limit;
+        
+      } catch (error) {
+        console.error("Failed to load rate limit:", error);
+      }
     }
   </script>
   <script>
@@ -327,6 +367,7 @@
         messageDiv.innerHTML = '<div class="success">Job created successfully!</div>';
         e.target.reset();
         loadJobs();
+        loadRateLimit();
       } catch (error) {
         messageDiv.innerHTML = `<div class="error">Error creating job: ${error.message}</div>`;
       }
@@ -378,8 +419,9 @@
     setInterval(() => {
       if (isAuthenticated) {
         loadJobs();
+        loadRateLimit();
       }
-    }, 60000);
+    }, 10000);
   </script>
 </body>
 

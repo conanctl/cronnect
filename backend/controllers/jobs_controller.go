@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/robfig/cron/v3"
+	"github.com/conan-flynn/cronnect/middleware"
 	"github.com/conan-flynn/cronnect/models"
 	"github.com/conan-flynn/cronnect/scheduler"
 	"github.com/gin-gonic/gin"
@@ -155,4 +156,27 @@ func (jc *JobController) DeleteJob(c *gin.Context) {
 	scheduler.ReloadJobs()
 	
 	c.JSON(http.StatusOK, gin.H{"message": "job deleted successfully"})
+}
+
+func (jc *JobController) GetRateLimit(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
+
+	rateLimiter := middleware.NewRateLimiter()
+	used, remaining, limit, resetAt, err := rateLimiter.GetRateLimitStatus(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get rate limit status"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"used":      used,
+		"remaining": remaining,
+		"limit":     limit,
+		"reset_at":  resetAt.Format("2006-01-02T15:04:05Z07:00"),
+		"window":    "1 hour",
+	})
 }
